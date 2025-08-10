@@ -1,0 +1,65 @@
+# Travel Chatbot Dependencies
+
+# ===========================================
+# CORE WEB FRAMEWORK
+# ===========================================
+fastapi==0.104.1                    # Modern, fast web framework for building APIs
+uvicorn[standard]==0.24.0            # ASGI server for FastAPI with auto-reload
+
+# ===========================================
+# HTTP CLIENT & ASYNC SUPPORT
+# ===========================================
+httpx==0.25.2                       # Async HTTP client for API calls (Amadeus, Groq)
+aiofiles==23.2.1                    # Async file operations support
+
+# ===========================================
+# DATA VALIDATION & SERIALIZATION
+# ===========================================
+pydantic==2.5.0                     # Data validation and settings management
+pydantic-settings==2.1.0            # Settings management for Pydantic V2
+
+# ===========================================
+# ENVIRONMENT & CONFIGURATION
+# ===========================================
+python-dotenv==1.0.0                # Load environment variables from .env file
+
+# ===========================================
+# DATE & TIME HANDLING
+# ===========================================
+python-dateutil==2.8.2              # Enhanced date parsing and manipulation
+
+# ===========================================
+# LOGGING & MONITORING
+# ===========================================
+structlog==23.2.0                   # Structured logging for better debugging
+
+# ===========================================
+# TEXT PROCESSING & NLP UTILITIES
+# ===========================================
+regex==2023.10.3                    # Enhanced regex support for text extraction
+
+# ===========================================
+# TESTING (Development)
+# ===========================================
+pytest==7.4.3                       # Testing framework
+pytest-asyncio==0.21.1              # Async testing support
+httpx==0.25.2                       # Already included above for testing HTTP endpoints
+
+# ===========================================
+# DEVELOPMENT TOOLS
+# ===========================================
+black==23.11.0                      # Code formatting
+isort==5.12.0                       # Import sorting
+flake8==6.1.0                       # Code linting
+
+# ===========================================
+# PRODUCTION DEPENDENCIES (Optional)
+# ===========================================
+gunicorn==21.2.0                    # Production WSGI server
+redis==5.0.1                        # Caching support (for future scaling)
+
+# ===========================================
+# SECURITY
+# ===========================================
+python-multipart==0.0.6             # Form data parsing
+email-validator==2.1.0              # Email validation utilities

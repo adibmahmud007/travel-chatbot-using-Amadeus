@@ -1,0 +1,104 @@
+# Travel Chatbot Docker Compose Configuration
+# For local development and testing
+
+version: '3.8'
+
+services:
+  # ===========================================
+  # MAIN APPLICATION SERVICE
+  # ===========================================
+  travel-chatbot:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: development  # Use development stage for local development
+    container_name: travel-chatbot-api
+    ports:
+      - "8000:8000"  # Map host port 8000 to container port 8000
+    environment:
+      # Override environment variables for Docker
+      - HOST=0.0.0.0
+      - PORT=8000
+      - ENVIRONMENT=development
+      - DEBUG=true
+    env_file:
+      - .env  # Load environment variables from .env file
+    volumes:
+      # Mount source code for development (auto-reload)
+      - ./app:/app/app:ro  # Read-only mount for security
+      - ./logs:/app/logs   # Mount logs directory (if needed)
+    restart: unless-stopped
+    networks:
+      - chatbot-network
+    depends_on:
+      - redis  # Wait for redis to start first
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # ===========================================
+  # REDIS CACHE SERVICE (Optional - for future scaling)
+  # ===========================================
+  redis:
+    image: redis:7-alpine
+    container_name: travel-chatbot-redis
+    ports:
+      - "6379:6379"  # Expose Redis port for debugging
+    volumes:
+      - redis_data:/data  # Persist Redis data
+    restart: unless-stopped
+    networks:
+      - chatbot-network
+    command: redis-server --appendonly yes --maxmemory 256mb
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  # ===========================================
+  # NGINX PROXY (Optional - for production-like setup)
+  # ===========================================
+  nginx:
+    image: nginx:alpine
+    container_name: travel-chatbot-nginx
+    ports:
+      - "80:80"    # HTTP
+      - "443:443"  # HTTPS (if SSL certificates are added)
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      - travel-chatbot
+    restart: unless-stopped
+    networks:
+      - chatbot-network
+    profiles:
+      - "with-proxy"  # Only start with: docker-compose --profile with-proxy up
+
+# ===========================================
+# NETWORKS
+# ===========================================
+networks:
+  chatbot-network:
+    driver: bridge
+    name: travel-chatbot-network
+
+# ===========================================
+# VOLUMES
+# ===========================================
+volumes:
+  redis_data:
+    driver: local
+    name: travel-chatbot-redis-data
+  logs:
+    driver: local
+    name: travel-chatbot-logs
+
+# ===========================================
+# DEVELOPMENT OVERRIDES
+# ===========================================
+# For additional development-specific settings,
+# create docker-compose.override.yml file
