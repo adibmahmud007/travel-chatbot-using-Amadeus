@@ -1,4 +1,5 @@
 
+
 import re
 import httpx
 import json
@@ -250,8 +251,8 @@ class TravelChatService:
         
         return None
 
-    async def get_hotels_by_city(self, city_code: str, access_token: str) -> List[str]:
-        """Get list of hotel names by city code - REAL DATA ONLY"""
+    async def get_hotels_by_city(self, city_code: str, access_token: str) -> List[Dict]:
+        """Get list of hotels with IDs by city code - REAL DATA ONLY"""
         try:
             url = f"{self.base_url}/v1/reference-data/locations/hotels/by-city"
             headers = {"Authorization": f"Bearer {access_token}"}
@@ -264,14 +265,20 @@ class TravelChatService:
                     data = response.json()
                     hotels = data.get("data", [])
                     
-                    # Extract hotel names - REAL DATA ONLY
-                    hotel_names = []
+                    # Extract hotel info including IDs - REAL DATA ONLY
+                    hotel_list = []
                     for hotel in hotels[:8]:  # Limit to 8 hotels
                         name = hotel.get("name")
-                        if name:
-                            hotel_names.append(name)
+                        hotel_id = hotel.get("hotelId")
+                        if name and hotel_id:
+                            hotel_list.append({
+                                "name": name,
+                                "hotel_id": hotel_id,
+                                "address": hotel.get("address", {}),
+                                "geoCode": hotel.get("geoCode", {})
+                            })
                     
-                    return hotel_names
+                    return hotel_list
                 else:
                     logger.warning(f"Hotel search failed: {response.status_code} - {response.text}")
                     return []  # Return empty if API fails
@@ -279,6 +286,77 @@ class TravelChatService:
         except Exception as e:
             logger.error(f"Error getting hotels for city {city_code}: {str(e)}")
             return []  # Return empty if error occurs
+
+    async def get_hotel_rating(self, hotel_id: str, access_token: str) -> Optional[str]:
+        """Get hotel rating from Hotel Sentiment API"""
+        try:
+            url = f"{self.base_url}/v2/e-reputation/hotel-sentiments"
+            headers = {"Authorization": f"Bearer {access_token}"}
+            params = {"hotelIds": hotel_id}
+            
+            async with httpx.AsyncClient() as client:
+                response = await client.get(url, headers=headers, params=params, timeout=10)
+                
+                if response.status_code == 200:
+                    data = response.json()
+                    
+                    # Debug logging to see actual response
+                    logger.info(f"Rating API response for {hotel_id}: {data}")
+                    
+                    sentiments = data.get("data", [])
+                    
+                    if sentiments and len(sentiments) > 0:
+                        sentiment = sentiments[0]
+                        overall_rating = sentiment.get("overallRating")
+                        
+                        logger.info(f"Overall rating for {hotel_id}: {overall_rating}")
+                        
+                        if overall_rating:
+                            # Convert rating to stars (1-100 scale to 1-5 stars)
+                            stars = round(float(overall_rating) / 20)  # Convert 100 scale to 5 star
+                            stars = max(1, min(5, stars))  # Ensure between 1-5
+                            return "⭐" * stars + f" ({overall_rating}/100)"
+                        else:
+                            logger.warning(f"No overallRating found for {hotel_id}")
+                            return None
+                    else:
+                        logger.warning(f"No sentiment data found for {hotel_id}")
+                        return None
+                else:
+                    logger.warning(f"Rating API failed for hotel {hotel_id}: {response.status_code} - {response.text}")
+                    return None
+                    
+        except Exception as e:
+            logger.error(f"Error getting rating for hotel {hotel_id}: {str(e)}")
+            return None
+
+    async def get_hotels_with_ratings(self, hotels_data: List[Dict], access_token: str) -> List[Dict]:
+        """Get hotels with ratings from sentiment API"""
+        hotels_with_ratings = []
+        
+        for hotel in hotels_data:
+            hotel_name = hotel["name"]
+            hotel_id = hotel["hotel_id"]
+            
+            # Get rating for this hotel
+            rating = await self.get_hotel_rating(hotel_id, access_token)
+            
+            hotels_with_ratings.append({
+                "name": hotel_name,
+                "rating": rating or "Rating not available",
+                "hotel_id": hotel_id,
+                "address": hotel.get("address", {}),
+                "geoCode": hotel.get("geoCode", {})
+            })
+        
+        return hotels_with_ratings
+        """Generate appropriate 'no hotels found' response in the detected language"""
+        if language == "french":
+            return f"Désolé, je n'ai pas pu trouver d'hôtels disponibles à {city_name}. Cette ville pourrait ne pas être disponible dans notre base de données ou il pourrait y avoir un problème temporaire. Veuillez essayer une autre ville ou réessayer plus tard. 🏨"
+        elif language == "malagasy":
+            return f"Miala tsiny, tsy nahita hotely misy any {city_name} aho. Mety tsy misy ity tanàna ity ao amin'ny angon-draharaha na misy olana vonjimaika. Andramo tanàna hafa na avereno indray tatỳ aoriana. 🏨"
+        else:  # English
+            return f"Sorry, I couldn't find any hotels available in {city_name}. This city might not be available in our database or there might be a temporary issue. Please try a different city or try again later. 🏨"
 
     def generate_no_hotels_response(self, language: str, city_name: str) -> str:
         """Generate appropriate 'no hotels found' response in the detected language"""
@@ -289,26 +367,26 @@ class TravelChatService:
         else:  # English
             return f"Sorry, I couldn't find any hotels available in {city_name}. This city might not be available in our database or there might be a temporary issue. Please try a different city or try again later. 🏨"
 
-    async def generate_multilingual_hotel_response(self, language: str, city_name: str, hotels: List[str]) -> str:
+    async def generate_multilingual_hotel_response(self, language: str, city_name: str, hotels: List[Dict]) -> str:
         """Generate AI-powered response in the detected language - REAL DATA ONLY"""
         try:
             if not self.groq_api_key:
                 return self.generate_simple_hotel_response(language, city_name, hotels)
                 
-            hotels_text = "\n".join([f"{i+1}. {hotel}" for i, hotel in enumerate(hotels)])
+            hotels_text = "\n".join([f"{i+1}. {hotel['name']} - {hotel['rating']}" for i, hotel in enumerate(hotels)])
             
             # Language-specific prompts
             if language == "french":
                 prompt = f"""
                 Créez une réponse amicale en français pour un voyageur cherchant des hôtels à {city_name}.
                 
-                Hôtels trouvés (données réelles d'Amadeus):
+                Hôtels trouvés avec notes (données réelles d'Amadeus):
                 {hotels_text}
                 
                 Créez une réponse qui:
                 1. Salue chaleureusement en français
                 2. Mentionne la ville demandée
-                3. Liste les hôtels de manière attrayante
+                3. Liste les hôtels avec leurs notes de manière attrayante
                 4. Indique que ce sont des données réelles d'Amadeus
                 5. Utilise des émojis appropriés
                 6. Reste concis et engageant
@@ -319,13 +397,13 @@ class TravelChatService:
                 prompt = f"""
                 Mamorona valiny sariaka amin'ny teny Malagasy ho an'ny mpandeha mitady hotely any {city_name}.
                 
-                Hotely hita (angon-drakitra tena avy amin'ny Amadeus):
+                Hotely hita miaraka amin'ny naoty (angon-drakitra tena avy amin'ny Amadeus):
                 {hotels_text}
                 
                 Mamorona valiny izay:
                 1. Manao veloma amin'ny fomba mafana amin'ny teny Malagasy
                 2. Milaza ny tanàna nangatahina
-                3. Manome lisitry ny hotely amin'ny fomba mahasarika
+                3. Manome lisitry ny hotely miaraka amin'ny naoty amin'ny fomba mahasarika
                 4. Milaza fa angon-drakitra marina avy amin'ny Amadeus izany
                 5. Mampiasa emoji mety
                 6. Mitazona ny fohy sy mahaliana
@@ -336,13 +414,13 @@ class TravelChatService:
                 prompt = f"""
                 Create a friendly English response for a traveler looking for hotels in {city_name}.
                 
-                Hotels found (real data from Amadeus):
+                Hotels found with ratings (real data from Amadeus):
                 {hotels_text}
                 
                 Create a response that:
                 1. Greets them warmly in English
                 2. Mentions the requested city
-                3. Lists the hotels attractively
+                3. Lists the hotels with ratings attractively
                 4. Indicates these are real Amadeus data
                 5. Uses appropriate emojis
                 6. Keeps it concise and engaging
@@ -380,22 +458,22 @@ class TravelChatService:
             logger.error(f"AI response generation error: {str(e)}")
             return self.generate_simple_hotel_response(language, city_name, hotels)
 
-    def generate_simple_hotel_response(self, language: str, city_name: str, hotels: List[str]) -> str:
+    def generate_simple_hotel_response(self, language: str, city_name: str, hotels: List[Dict]) -> str:
         """Simple response when AI is not available - REAL DATA ONLY"""
         if language == "french":
             response = f"🏨 Voici les hôtels disponibles à {city_name} (données réelles d'Amadeus):\n\n"
             for i, hotel in enumerate(hotels, 1):
-                response += f"{i}. {hotel}\n"
+                response += f"{i}. {hotel['name']} - {hotel['rating']}\n"
             response += f"\nTotal: {len(hotels)} hôtels trouvés! ✨"
         elif language == "malagasy":
             response = f"🏨 Ireto ny hotely misy any {city_name} (angon-drakitra marina avy amin'ny Amadeus):\n\n"
             for i, hotel in enumerate(hotels, 1):
-                response += f"{i}. {hotel}\n"
+                response += f"{i}. {hotel['name']} - {hotel['rating']}\n"
             response += f"\nTotaliny: hotely {len(hotels)} no hita! ✨"
         else:
             response = f"🏨 Here are available hotels in {city_name} (real data from Amadeus):\n\n"
             for i, hotel in enumerate(hotels, 1):
-                response += f"{i}. {hotel}\n"
+                response += f"{i}. {hotel['name']} - {hotel['rating']}\n"
             response += f"\nTotal {len(hotels)} hotels found! ✨"
         
         return response.strip()
@@ -551,22 +629,25 @@ class TravelChatService:
                     return ChatResponse(response=no_city_message)
                 
                 # Get hotels from Amadeus API - REAL DATA ONLY
-                hotels = await self.get_hotels_by_city(city_code, access_token)
+                hotels_data = await self.get_hotels_by_city(city_code, access_token)
                 
-                if hotels:
-                    # Create hotel info objects for response - REAL DATA
+                if hotels_data:
+                    # Get ratings for hotels
+                    hotels_with_ratings = await self.get_hotels_with_ratings(hotels_data, access_token)
+                    
+                    # Create hotel info objects for response - REAL DATA WITH RATINGS
                     hotel_info_list = [
                         HotelInfo(
-                            name=hotel,
+                            name=hotel["name"],
                             price=None,  # No price in simple version
-                            rating=None,  # No rating in simple version
+                            rating=hotel["rating"],  # Real rating from Amadeus
                             location=city_name
                         )
-                        for hotel in hotels
+                        for hotel in hotels_with_ratings
                     ]
                     
                     # Generate multilingual AI-powered response with REAL DATA
-                    response_text = await self.generate_multilingual_hotel_response(language, city_name, hotels)
+                    response_text = await self.generate_multilingual_hotel_response(language, city_name, hotels_with_ratings)
                     
                     return ChatResponse(
                         response=response_text,
