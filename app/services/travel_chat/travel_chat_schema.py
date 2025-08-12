@@ -20,7 +20,7 @@ class ChatRequest(BaseModel):
     class Config:
         json_schema_extra = {
             "example": {
-                "message": "I want hotels in Paris under 200 euro"
+                "message": "I want hotels in Paris"
             }
         }
 
@@ -78,7 +78,7 @@ class ChatResponse(BaseModel):
                     {
                         "name": "Hotel Paris Central",
                         "price": "€150/night",
-                        "rating": "4⭐",
+                        "rating": "4*",
                         "location": "Central Paris"
                     }
                 ],

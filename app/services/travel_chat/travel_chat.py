@@ -1,8 +1,3 @@
-"""
-Travel Chat Service - Multilingual Hotel List
-
-Multilingual hotel list service that supports English, French, and Bangla.
-"""
 
 import re
 import httpx
@@ -78,17 +73,19 @@ class TravelChatService:
             Message: "{message}"
             
             Extract:
-            1. language: "english", "french", or "bangla" 
+            1. language: "english", "french", or "malagasy" 
             2. city: city name in English (or null if no city found)
             
             Examples:
             "I want hotels in Dhaka" → {{"language": "english", "city": "Dhaka"}}
             "Je veux des hôtels à Paris" → {{"language": "french", "city": "Paris"}}
-            "আমি ঢাকার হোটেল চাই" → {{"language": "bangla", "city": "Dhaka"}}
+            "Tiako hotely any Antananarivo" → {{"language": "malagasy", "city": "Antananarivo"}}
             "Je cherche des hôtels à Cox's Bazar" → {{"language": "french", "city": "Cox's Bazar"}}
             "Montrez-moi des hôtels à Tokyo" → {{"language": "french", "city": "Tokyo"}}
+            "Asehoy hotely any Mumbai" → {{"language": "malagasy", "city": "Mumbai"}}
             "Hello" → {{"language": "english", "city": null}}
             "Bonjour" → {{"language": "french", "city": null}}
+            "Manao ahoana" → {{"language": "malagasy", "city": null}}
             
             Return only valid JSON.
             """
@@ -131,23 +128,23 @@ class TravelChatService:
         
         # Language detection patterns
         french_indicators = ['je veux', 'des hôtels', 'à', 'montrez-moi', 'je cherche', 'bonjour', 'dans']
-        bangla_indicators = ['আমি', 'হোটেল', 'চাই', 'দেখতে', 'খুঁজছি', 'হ্যালো']
+        malagasy_indicators = ['tiako', 'hotely', 'any', 'asehoy', 'manao ahoana', 'salama', 'toerana']
         
         detected_language = "english"  # default
         
         # Check for French
         if any(indicator in message_lower for indicator in french_indicators):
             detected_language = "french"
-        # Check for Bangla
-        elif any(indicator in message for indicator in bangla_indicators):
-            detected_language = "bangla"
+        # Check for Malagasy
+        elif any(indicator in message_lower for indicator in malagasy_indicators):
+            detected_language = "malagasy"
         
         # Extract city using patterns based on detected language
         city = None
         if detected_language == "french":
             city = self.extract_city_french(message)
-        elif detected_language == "bangla":
-            city = self.extract_city_bangla(message)
+        elif detected_language == "malagasy":
+            city = self.extract_city_malagasy(message)
         else:
             city = self.extract_city_english(message)
         
@@ -182,29 +179,48 @@ class TravelChatService:
                 return match.group(1).strip().title()
         return None
 
-    def extract_city_bangla(self, message: str) -> Optional[str]:
-        """Extract city from Bangla message and convert to English"""
-        # Bangla to English city mapping
+    def extract_city_malagasy(self, message: str) -> Optional[str]:
+        """Extract city from Malagasy message and convert to English"""
+        # Malagasy to English city mapping
         city_mapping = {
-            'ঢাকা': 'Dhaka',
-            'চট্টগ্রাম': 'Chittagong',
-            'সিলেট': 'Sylhet',
-            'খুলনা': 'Khulna',
-            'রাজশাহী': 'Rajshahi',
-            'বরিশাল': 'Barisal',
-            'রংপুর': 'Rangpur',
-            'কক্সবাজার': "Cox's Bazar",
-            'দিল্লি': 'Delhi',
-            'মুম্বাই': 'Mumbai',
-            'কলকাতা': 'Kolkata',
-            'প্যারিস': 'Paris',
-            'লন্ডন': 'London',
-            'টোকিও': 'Tokyo'
+            'antananarivo': 'Antananarivo',
+            'toamasina': 'Toamasina',
+            'antsirabe': 'Antsirabe',
+            'fianarantsoa': 'Fianarantsoa',
+            'mahajanga': 'Mahajanga',
+            'toliara': 'Toliara',
+            'antsiranana': 'Antsiranana',
+            'dhaka': 'Dhaka',
+            'mumbai': 'Mumbai',
+            'delhi': 'Delhi',
+            'paris': 'Paris',
+            'london': 'London',
+            'tokyo': 'Tokyo',
+            'new york': 'New York',
+            'sydney': 'Sydney'
         }
         
+        # Malagasy city extraction patterns
+        patterns = [
+            r'hotely\s+any\s+([^,.\n]+?)(?:\s|$|,|\.)',
+            r'tiako\s+hotely\s+any\s+([^,.\n]+?)(?:\s|$|,|\.)',
+            r'asehoy\s+hotely\s+any\s+([^,.\n]+?)(?:\s|$|,|\.)',
+            r'any\s+([^,.\n]+?)(?:\s|$|,|\.)',
+        ]
+        
+        for pattern in patterns:
+            match = re.search(pattern, message.lower())
+            if match:
+                city_found = match.group(1).strip()
+                # Check if it's in our mapping
+                if city_found in city_mapping:
+                    return city_mapping[city_found]
+                # Otherwise return as title case
+                return city_found.title()
+        
         # Check for direct city mentions
-        for bangla_city, english_city in city_mapping.items():
-            if bangla_city in message:
+        for malagasy_city, english_city in city_mapping.items():
+            if malagasy_city in message.lower():
                 return english_city
         
         return None
@@ -235,7 +251,7 @@ class TravelChatService:
         return None
 
     async def get_hotels_by_city(self, city_code: str, access_token: str) -> List[str]:
-        """Get list of hotel names by city code"""
+        """Get list of hotel names by city code - REAL DATA ONLY"""
         try:
             url = f"{self.base_url}/v1/reference-data/locations/hotels/by-city"
             headers = {"Authorization": f"Bearer {access_token}"}
@@ -248,7 +264,7 @@ class TravelChatService:
                     data = response.json()
                     hotels = data.get("data", [])
                     
-                    # Extract hotel names
+                    # Extract hotel names - REAL DATA ONLY
                     hotel_names = []
                     for hotel in hotels[:8]:  # Limit to 8 hotels
                         name = hotel.get("name")
@@ -258,81 +274,26 @@ class TravelChatService:
                     return hotel_names
                 else:
                     logger.warning(f"Hotel search failed: {response.status_code} - {response.text}")
-                    return []
+                    return []  # Return empty if API fails
                     
         except Exception as e:
             logger.error(f"Error getting hotels for city {city_code}: {str(e)}")
-            return []
+            return []  # Return empty if error occurs
 
-    def get_fallback_hotels(self, city_name: str) -> List[str]:
-        """Provide fallback hotel list for common cities"""
-        fallback_data = {
-            "dhaka": [
-                "The Westin Dhaka",
-                "InterContinental Dhaka",
-                "Pan Pacific Sonargaon",
-                "Le Meridien Dhaka",
-                "Hotel Sarina",
-                "The Cox Today",
-                "Hotel 71"
-            ],
-            "cox's bazar": [
-                "Hotel Sea Cox",
-                "Long Beach Hotel",
-                "Ocean Paradise Hotel",
-                "Royal Tulip Sea Pearl",
-                "Praasad Paradise Hotel"
-            ],
-            "chittagong": [
-                "Hotel Agrabad",
-                "Peninsula Chittagong",
-                "The Peninsula Hotel",
-                "Hotel Golden Inn"
-            ],
-            "mumbai": [
-                "The Taj Mahal Palace",
-                "The Oberoi Mumbai", 
-                "Grand Hyatt Mumbai",
-                "ITC Maratha",
-                "Hotel Marine Plaza"
-            ],
-            "delhi": [
-                "The Imperial New Delhi",
-                "Taj Palace New Delhi",
-                "The Oberoi New Delhi",
-                "ITC Maurya",
-                "Hotel Shanker"
-            ],
-            "paris": [
-                "Le Ritz Paris",
-                "Four Seasons Hotel George V",
-                "Le Meurice",
-                "Plaza Athénée",
-                "InterContinental Paris"
-            ],
-            "london": [
-                "The Savoy",
-                "Claridge's",
-                "The Langham",
-                "The Shard Hotel",
-                "Park Lane Hotel"
-            ],
-            "tokyo": [
-                "The Imperial Hotel",
-                "Park Hyatt Tokyo",
-                "The Ritz-Carlton Tokyo",
-                "Conrad Tokyo",
-                "Hotel Okura Tokyo"
-            ]
-        }
-        
-        return fallback_data.get(city_name.lower(), [])
+    def generate_no_hotels_response(self, language: str, city_name: str) -> str:
+        """Generate appropriate 'no hotels found' response in the detected language"""
+        if language == "french":
+            return f"Désolé, je n'ai pas pu trouver d'hôtels disponibles à {city_name}. Cette ville pourrait ne pas être disponible dans notre base de données ou il pourrait y avoir un problème temporaire. Veuillez essayer une autre ville ou réessayer plus tard. 🏨"
+        elif language == "malagasy":
+            return f"Miala tsiny, tsy nahita hotely misy any {city_name} aho. Mety tsy misy ity tanàna ity ao amin'ny angon-draharaha na misy olana vonjimaika. Andramo tanàna hafa na avereno indray tatỳ aoriana. 🏨"
+        else:  # English
+            return f"Sorry, I couldn't find any hotels available in {city_name}. This city might not be available in our database or there might be a temporary issue. Please try a different city or try again later. 🏨"
 
     async def generate_multilingual_hotel_response(self, language: str, city_name: str, hotels: List[str]) -> str:
-        """Generate AI-powered response in the detected language"""
+        """Generate AI-powered response in the detected language - REAL DATA ONLY"""
         try:
-            if not self.groq_api_key or not hotels:
-                return self.generate_fallback_response(language, city_name, hotels)
+            if not self.groq_api_key:
+                return self.generate_simple_hotel_response(language, city_name, hotels)
                 
             hotels_text = "\n".join([f"{i+1}. {hotel}" for i, hotel in enumerate(hotels)])
             
@@ -341,48 +302,48 @@ class TravelChatService:
                 prompt = f"""
                 Créez une réponse amicale en français pour un voyageur cherchant des hôtels à {city_name}.
                 
-                Hôtels trouvés:
+                Hôtels trouvés (données réelles d'Amadeus):
                 {hotels_text}
                 
                 Créez une réponse qui:
                 1. Salue chaleureusement en français
                 2. Mentionne la ville demandée
                 3. Liste les hôtels de manière attrayante
-                4. Ajoute des conseils de voyage utiles
+                4. Indique que ce sont des données réelles d'Amadeus
                 5. Utilise des émojis appropriés
                 6. Reste concis et engageant
                 
                 Répondez uniquement en français.
                 """
-            elif language == "bangla":
+            elif language == "malagasy":
                 prompt = f"""
-                {city_name} শহরে হোটেল খুঁজছেন এমন একজন ভ্রমণকারীর জন্য বাংলায় একটি বন্ধুত্বপূর্ণ উত্তর তৈরি করুন।
+                Mamorona valiny sariaka amin'ny teny Malagasy ho an'ny mpandeha mitady hotely any {city_name}.
                 
-                পাওয়া হোটেলগুলো:
+                Hotely hita (angon-drakitra tena avy amin'ny Amadeus):
                 {hotels_text}
                 
-                এমন একটি উত্তর তৈরি করুন যেটি:
-                1. বাংলায় উষ্ণভাবে অভিবাদন জানায়
-                2. অনুরোধ করা শহরের উল্লেখ করে
-                3. হোটেলগুলো আকর্ষণীয়ভাবে তালিকাভুক্ত করে
-                4. সহায়ক ভ্রমণ টিপস যোগ করে
-                5. উপযুক্ত ইমোজি ব্যবহার করে
-                6. সংক্ষিপ্ত এবং আকর্ষক রাখে
+                Mamorona valiny izay:
+                1. Manao veloma amin'ny fomba mafana amin'ny teny Malagasy
+                2. Milaza ny tanàna nangatahina
+                3. Manome lisitry ny hotely amin'ny fomba mahasarika
+                4. Milaza fa angon-drakitra marina avy amin'ny Amadeus izany
+                5. Mampiasa emoji mety
+                6. Mitazona ny fohy sy mahaliana
                 
-                শুধুমাত্র বাংলায় উত্তর দিন।
+                Valio amin'ny teny Malagasy ihany.
                 """
             else:  # English
                 prompt = f"""
                 Create a friendly English response for a traveler looking for hotels in {city_name}.
                 
-                Hotels found:
+                Hotels found (real data from Amadeus):
                 {hotels_text}
                 
                 Create a response that:
                 1. Greets them warmly in English
                 2. Mentions the requested city
                 3. Lists the hotels attractively
-                4. Adds helpful travel tips
+                4. Indicates these are real Amadeus data
                 5. Uses appropriate emojis
                 6. Keeps it concise and engaging
                 
@@ -413,34 +374,26 @@ class TravelChatService:
                     result = response.json()
                     return result["choices"][0]["message"]["content"].strip()
                 else:
-                    return self.generate_fallback_response(language, city_name, hotels)
+                    return self.generate_simple_hotel_response(language, city_name, hotels)
                     
         except Exception as e:
             logger.error(f"AI response generation error: {str(e)}")
-            return self.generate_fallback_response(language, city_name, hotels)
+            return self.generate_simple_hotel_response(language, city_name, hotels)
 
-    def generate_fallback_response(self, language: str, city_name: str, hotels: List[str]) -> str:
-        """Fallback response in the appropriate language"""
-        if not hotels:
-            if language == "french":
-                return f"Désolé, je n'ai pas pu trouver d'hôtels à {city_name}. Veuillez essayer une autre ville. 🏨"
-            elif language == "bangla":
-                return f"দুঃখিত, আমি {city_name} এ কোনো হোটেল খুঁজে পাইনি। অন্য একটি শহর চেষ্টা করুন। 🏨"
-            else:
-                return f"Sorry, I couldn't find any hotels in {city_name}. Please try a different city. 🏨"
-        
+    def generate_simple_hotel_response(self, language: str, city_name: str, hotels: List[str]) -> str:
+        """Simple response when AI is not available - REAL DATA ONLY"""
         if language == "french":
-            response = f"🏨 Voici d'excellents hôtels à {city_name}:\n\n"
+            response = f"🏨 Voici les hôtels disponibles à {city_name} (données réelles d'Amadeus):\n\n"
             for i, hotel in enumerate(hotels, 1):
                 response += f"{i}. {hotel}\n"
             response += f"\nTotal: {len(hotels)} hôtels trouvés! ✨"
-        elif language == "bangla":
-            response = f"🏨 {city_name} এর দুর্দান্ত হোটেলগুলো:\n\n"
+        elif language == "malagasy":
+            response = f"🏨 Ireto ny hotely misy any {city_name} (angon-drakitra marina avy amin'ny Amadeus):\n\n"
             for i, hotel in enumerate(hotels, 1):
                 response += f"{i}. {hotel}\n"
-            response += f"\nমোট {len(hotels)}টি হোটেল পাওয়া গেছে! ✨"
+            response += f"\nTotaliny: hotely {len(hotels)} no hita! ✨"
         else:
-            response = f"🏨 Here are great hotels in {city_name}:\n\n"
+            response = f"🏨 Here are available hotels in {city_name} (real data from Amadeus):\n\n"
             for i, hotel in enumerate(hotels, 1):
                 response += f"{i}. {hotel}\n"
             response += f"\nTotal {len(hotels)} hotels found! ✨"
@@ -469,21 +422,21 @@ class TravelChatService:
                 
                 Répondez uniquement en français.
                 """
-            elif language == "bangla":
+            elif language == "malagasy":
                 prompt = f"""
-                আপনি একজন বন্ধুত্বপূর্ণ ভ্রমণ সহায়ক। এই বার্তার সহায়ক উত্তর বাংলায় দিন।
+                Ianao dia mpanampy dia sariaka. Valio ity hafatra ity amin'ny teny Malagasy amin'ny fomba mahasoa.
                 
-                ব্যবহারকারীর বার্তা: "{message}"
+                Hafatry ny mpampiasa: "{message}"
                 
-                নির্দেশনা:
-                - বন্ধুত্বপূর্ণ এবং সহায়ক হন
-                - যদি এটি একটি অভিবাদন হয়, উষ্ণভাবে উত্তর দিন এবং ব্যাখ্যা করুন যে আপনি হোটেল খুঁজতে সাহায্য করতে পারেন
-                - যদি তারা সাহায্য চান, ব্যাখ্যা করুন যে আপনি শহর অনুযায়ী হোটেল তালিকা দেখাতে পারেন
-                - উত্তর ছোট রাখুন (সর্বোচ্চ ২-৩ বাক্য)
-                - উপযুক্ত ইমোজি ব্যবহার করুন
-                - তাদের সর্বদা যেকোনো শহরে হোটেল জিজ্ঞাসা করতে উৎসাহিত করুন
+                Torolalana:
+                - Aoka ho sariaka sy mahasoa
+                - Raha fiarahabana izany, manaova veloma mafana ary hazavao fa afaka manampy hitady hotely ianao
+                - Raha mitady fanampiana izy ireo, hazavao fa afaka mampiseho lisitry ny hotely isaky ny tanàna ianao
+                - Ataovy fohy ny valiny (fehezanteny 2-3 fara fahabetsany)
+                - Mampiasà emoji mety
+                - Amporisiho hatrany izy ireo hangataka hotely amin'ny tanàna rehetra
                 
-                শুধুমাত্র বাংলায় উত্তর দিন।
+                Valio amin'ny teny Malagasy ihany.
                 """
             else:  # English
                 prompt = f"""
@@ -536,18 +489,22 @@ class TravelChatService:
         """Fallback conversational responses in appropriate language"""
         message_lower = message.lower()
         
+    def get_fallback_conversational_response(self, language: str, message: str) -> str:
+        """Fallback conversational responses in appropriate language"""
+        message_lower = message.lower()
+        
         # Greeting detection
         greetings = {
             "english": ['hello', 'hi', 'hey'],
             "french": ['bonjour', 'salut', 'bonsoir'],
-            "bangla": ['হ্যালো', 'নমস্কার', 'আস্সালামু আলাইকুম']
+            "malagasy": ['manao ahoana', 'salama', 'akory']
         }
         
         # Help detection  
         help_words = {
             "english": ['help', 'what can you do'],
             "french": ['aide', 'aidez-moi', 'que pouvez-vous faire'],
-            "bangla": ['সাহায্য', 'সাহায্য চাই', 'কী করতে পারেন']
+            "malagasy": ['fanampiana', 'ampianao', 'inona no vitanao']
         }
         
         is_greeting = any(word in message_lower for word in greetings.get(language, []))
@@ -560,13 +517,13 @@ class TravelChatService:
                 return "Je peux vous montrer des listes d'hôtels par ville! 🏨 Dites simplement 'Je veux des hôtels à [nom de la ville]'. Essayez: 'Montrez-moi des hôtels à Paris'"
             else:
                 return "Je peux vous aider à trouver des hôtels! 🏨 Dites-moi dans quelle ville vous êtes intéressé. Exemple: 'Je veux des hôtels à Tokyo'"
-        elif language == "bangla":
+        elif language == "malagasy":
             if is_greeting:
-                return "হ্যালো! 👋 আমি বিশ্বের যেকোনো শহরে হোটেল খুঁজে দিতে পারি। শুধু বলুন কোথায় থাকতে চান!"
+                return "Manao ahoana! 👋 Afaka manampy anao hitady hotely any amin'ny tanàna rehetra eran'izao tontolo izao aho. Lazao fotsiny hoe aiza no tianao hivonana!"
             elif is_help:
-                return "আমি শহর অনুযায়ী হোটেল তালিকা দেখাতে পারি! 🏨 শুধু বলুন 'আমি [শহরের নাম] এ হোটেল চাই'। চেষ্টা করুন: 'আমি ঢাকার হোটেল চাই'"
+                return "Afaka mampiseho lisitry ny hotely isaky ny tanàna aho! 🏨 Lazao fotsiny hoe 'Tiako hotely any [anaran'ny tanàna]'. Andramo: 'Asehoy ny hotely any Antananarivo'"
             else:
-                return "আমি হোটেল খুঁজে দিতে পারি! 🏨 বলুন কোন শহরে আগ্রহী। উদাহরণ: 'আমি দিল্লির হোটেল চাই'"
+                return "Afaka manampy anao hitady hotely aho! 🏨 Lazao ahy hoe amin'ny tanàna inona no liana ianao. Ohatra: 'Tiako hotely any Paris'"
         else:  # English
             if is_greeting:
                 return "Hello! 👋 I can help you find hotels in any city worldwide. Just tell me where you want to stay!"
@@ -576,31 +533,28 @@ class TravelChatService:
                 return "I can help you find hotels! 🏨 Just tell me which city you're interested in. Example: 'Hotels in London please'"
 
     async def process_message(self, message: str) -> ChatResponse:
-        """Process user message and return multilingual response"""
+        """Process user message and return multilingual response - REAL DATA ONLY"""
         try:
             # Detect language and extract city
             language, city_name = await self.detect_language_and_extract_city(message)
             
             if city_name:
-                # User wants hotel list for a city
+                # User wants hotel list for a city - REAL DATA ONLY
                 access_token = await self.get_access_token()
                 
                 # Get city code
                 city_code = await self.get_city_code(city_name, access_token)
                 
-                if city_code:
-                    # Get hotels from Amadeus API
-                    hotels = await self.get_hotels_by_city(city_code, access_token)
-                else:
-                    # Fallback to predefined hotel list
-                    hotels = self.get_fallback_hotels(city_name)
+                if not city_code:
+                    # City not found in Amadeus database
+                    no_city_message = self.generate_no_hotels_response(language, city_name)
+                    return ChatResponse(response=no_city_message)
                 
-                # If still no hotels, try fallback
-                if not hotels:
-                    hotels = self.get_fallback_hotels(city_name)
+                # Get hotels from Amadeus API - REAL DATA ONLY
+                hotels = await self.get_hotels_by_city(city_code, access_token)
                 
                 if hotels:
-                    # Create hotel info objects for response
+                    # Create hotel info objects for response - REAL DATA
                     hotel_info_list = [
                         HotelInfo(
                             name=hotel,
@@ -611,7 +565,7 @@ class TravelChatService:
                         for hotel in hotels
                     ]
                     
-                    # Generate multilingual AI-powered response
+                    # Generate multilingual AI-powered response with REAL DATA
                     response_text = await self.generate_multilingual_hotel_response(language, city_name, hotels)
                     
                     return ChatResponse(
@@ -619,7 +573,8 @@ class TravelChatService:
                         hotels=hotel_info_list
                     )
                 else:
-                    no_results_message = self.generate_fallback_response(language, city_name, [])
+                    # No hotels found in Amadeus API - NO FAKE DATA
+                    no_results_message = self.generate_no_hotels_response(language, city_name)
                     return ChatResponse(response=no_results_message)
             
             else:
